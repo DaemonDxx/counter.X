@@ -17,21 +17,27 @@
 #include <xc.h>
 
 
-#define CR_LIMIT 3320
+//Количестно миганий до передвигания механизма
 #define LIGHT_LIMIT 3
+//Ширина импульса мигуания
 #define TIMER0_LIMIT 17
+//Время через которое наступает неоучет
 #define UPGRADE_LIMIT 3600000
 
+//Флаг передвинуть счетный механизм
 int turn_flag = 0;
+//Количестно прошедших морганий
 int light_counter = 0;
+//Количество импульсов от плат учета мощности
 long interrupt_counter = 0;
+//Количество прерываний 0 тамера
 int timer0_conter = 0;
-long timer2_counter = 0;
-int prescaler = 1;
+//Количество импульсов до моргания
 int cr_limit = 3400;
+//Количество прерываний таймера до недоучета
 unsigned long upgrade_timer = 0;
 
-
+//Функция поворота счетного механизма
 void turn() {
     if (RC1) {
         PORTC = 0b00000000;
@@ -43,6 +49,7 @@ void turn() {
         PORTC = 0b00000010;
     }
 }
+
 
 void initPIN() {
     TRISA = 0b00110100;
@@ -80,6 +87,7 @@ void setup() {
 
 
 void interrupt isr() {  
+    //Обработка сигнала от модулей измерения мощности
     if (RABIF) {
         interrupt_counter++;
         if (interrupt_counter == cr_limit) {
@@ -96,6 +104,7 @@ void interrupt isr() {
         RABIF = 0;
     }
     
+    //Обработка прерывания таймера
     if (TMR0IF && TMR0IE) {
         timer0_conter++;
         if (timer0_conter == TIMER0_LIMIT) {
@@ -106,6 +115,7 @@ void interrupt isr() {
         TMR0IF = 0;
     }
     
+    //Обработка прерывания второго таймера
     if (TMR2IF) {
         upgrade_timer++;
         if (upgrade_timer == UPGRADE_LIMIT) {
