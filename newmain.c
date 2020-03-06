@@ -20,22 +20,25 @@
 //Количестно миганий до передвигания механизма
 #define LIGHT_LIMIT 3
 //Ширина импульса мигуания
-#define TIMER0_LIMIT 17
+#define TIME_ON_LIGHT 17
 //Время через которое наступает неоучет
 #define UPGRADE_LIMIT 3600000
 
 //Флаг передвинуть счетный механизм
-int turn_flag = 0;
+char turn_flag = 0;
 //Количестно прошедших морганий
-int light_counter = 0;
+char light_counter = 0;
 //Количество импульсов от плат учета мощности
-long interrupt_counter = 0;
+unsigned int interrupt_counter = 0;
 //Количество прерываний 0 тамера
 int timer0_conter = 0;
 //Количество импульсов до моргания
-int cr_limit = 3400;
+unsigned int cr_limit = 3400;
 //Количество прерываний таймера до недоучета
 unsigned long upgrade_timer = 0;
+//Время работы микроконтроллера
+unsigned long time = 0;
+unsigned long start_on_light = 0;
 
 //Функция поворота счетного механизма
 void turn() {
@@ -48,6 +51,7 @@ void turn() {
         __delay_us(1);
         PORTC = 0b00000010;
     }
+    turn_flag = 0;
 }
 
 
@@ -69,6 +73,7 @@ void initInterrupt() {
 void initTimer2() {
     T2CON = 0b00000111;
     PIE1bits.TMR2IE = 1;
+    PR2 = 250;
 }
 
 void initTimer0() {
@@ -86,14 +91,18 @@ void setup() {
 }
 
 
+void reset_time() {
+    time = 0;
+}
+
 void interrupt isr() {  
     //Обработка сигнала от модулей измерения мощности
     if (RABIF) {
         interrupt_counter++;
         if (interrupt_counter == cr_limit) {
+            //ВКлючить диод
             PORTCbits.RC0 = 0;
-            TMR0IE = 1;
-            TMR0 = 0;
+            start_on_light = time;
             interrupt_counter = 0;
             light_counter++;
             if (light_counter == LIGHT_LIMIT) {
@@ -102,28 +111,11 @@ void interrupt isr() {
             }
         }
         RABIF = 0;
-    }
-    
-    //Обработка прерывания таймера
-    if (TMR0IF && TMR0IE) {
-        timer0_conter++;
-        if (timer0_conter == TIMER0_LIMIT) {
-            PORTCbits.RC0 = 1;
-            TMR0IE = 0;
-            timer0_conter = 0;
-        }
-        TMR0IF = 0;
-    }
-    
-    //Обработка прерывания второго таймера
-    if (TMR2IF) {
-        upgrade_timer++;
-        if (upgrade_timer == UPGRADE_LIMIT) {
-            cr_limit = 6800;
-            T2CON = 0b00000000;
-        }
+    } else {
+        time++;
         TMR2IF = 0;
     }
+    
 }
 
 void main(void) {
@@ -131,7 +123,12 @@ void main(void) {
     while (1) {
         if (turn_flag) {
             turn();
-            turn_flag = 0;
+        }
+        if ((time - start_on_light >= TIME_ON_LIGHT) && !RC0) {
+            PORTCbits.RC0 = 1;
+        }
+        if (time > 4294967200) {
+            reset_time();
         }
     }
 }
