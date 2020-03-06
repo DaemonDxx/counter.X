@@ -33,7 +33,7 @@ unsigned int interrupt_counter = 0;
 //Количество прерываний 0 тамера
 int timer0_conter = 0;
 //Количество импульсов до моргания
-unsigned int cr_limit = 3400;
+unsigned int cr_limit = 1710;
 //Количество прерываний таймера до недоучета
 unsigned long upgrade_timer = 0;
 //Время работы микроконтроллера
@@ -110,6 +110,7 @@ void interrupt isr() {
                 light_counter = 0;
             }
         }
+        __delay_us(40);
         RABIF = 0;
     } else {
         time++;
