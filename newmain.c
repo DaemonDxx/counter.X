@@ -4,7 +4,7 @@
 #pragma config WDTE = OFF       // Watchdog Timer Enable bit (WDT enabled)
 #pragma config PWRTE = OFF      // Power-up Timer Enable bit (PWRT disabled)
 #pragma config MCLRE = ON       // RA3/MCLR/VPP Pin Function Select bit (RA3/MCLR/VPP pin function is MCLR; Weak pull-up enabled.)
-#pragma config CP = OFF         // Flash Program Memory Code Protection bit (Code protection off)
+#pragma config CP = ON         // Flash Program Memory Code Protection bit (Code protection off)
 #pragma config BOREN = ON       // Brown-out Reset Enable bits (Brown-out Reset enabled)
 #pragma config PLLEN = ON       // INTOSC PLLEN Enable Bit (INTOSC Frequency is 16 MHz (32x))
 
@@ -23,6 +23,7 @@
 #define TIME_ON_LIGHT 17
 //Время через которое наступает неоучет
 #define UPGRADE_LIMIT 3600000
+#define TIMER_PROG_MODE 30000
 
 //Флаг передвинуть счетный механизм
 char turn_flag = 0;
@@ -39,6 +40,9 @@ unsigned long upgrade_timer = 0;
 //Время работы микроконтроллера
 unsigned long time = 0;
 unsigned long start_on_light = 0;
+char start_remember_flag = 1;
+unsigned long interrupt_time = 0;
+char prog_mode = 0;
 
 //Функция поворота счетного механизма
 void turn() {
@@ -93,6 +97,8 @@ void setup() {
 
 void reset_time() {
     time = 0;
+    interrupt_time = 0;
+    start_on_light = 0;
 }
 
 void interrupt isr() {  
@@ -111,6 +117,7 @@ void interrupt isr() {
             }
         }
         __delay_us(40);
+        start_remember_flag = 1;
         RABIF = 0;
     } else {
         time++;
@@ -130,6 +137,14 @@ void main(void) {
         }
         if (time > 4294967200) {
             reset_time();
+        }
+        if (start_remember_flag) {
+            start_remember_flag = 0;
+            interrupt_time = time;
+        }
+        if ((time - interrupt_time > TIMER_PROG_MODE) && !prog_mode) {
+            prog_mode = 1;
+            PORTCbits.RC0 = 0;
         }
     }
 }
