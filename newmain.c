@@ -17,10 +17,10 @@
 #include <xc.h>
 
 
-#define CR_LIMIT 2559
+#define CR_LIMIT 3320
 #define LIGHT_LIMIT 3
-#define TIMER0_LIMIT 9
-#define TIMER2_LIMIT 600000
+#define TIMER0_LIMIT 17
+#define UPGRADE_LIMIT 3600000
 
 int turn_flag = 0;
 int light_counter = 0;
@@ -28,7 +28,9 @@ long interrupt_counter = 0;
 int timer0_conter = 0;
 long timer2_counter = 0;
 int prescaler = 1;
-int cr_limit = 2559;
+int cr_limit = 3400;
+unsigned long upgrade_timer = 0;
+
 
 void turn() {
     if (RC1) {
@@ -57,24 +59,23 @@ void initInterrupt() {
     RABIE = 1;
 }
 
+void initTimer2() {
+    T2CON = 0b00000111;
+    PIE1bits.TMR2IE = 1;
+}
+
 void initTimer0() {
-    OPTION_REG = 0b11010100;
+    OPTION_REG = 0b11010011;
 }
 
 
 void setup() {
     initPIN();
     initInterrupt();
-    initTimer0();
-
-}
-
-
-void blink() {
-    //???????? ???? ?? 92 ??
-    PORTCbits.RC0 = 0;
-    TMR0IE = 1;
-    TMR0 = 0;
+    initTimer0();   
+    initTimer2();
+    OSCCONbits.IRCF0 = 1;
+    OSCCONbits.IRCF1 = 1;
 }
 
 
@@ -82,11 +83,11 @@ void interrupt isr() {
     if (RABIF) {
         interrupt_counter++;
         if (interrupt_counter == cr_limit) {
+            PORTCbits.RC0 = 0;
+            TMR0IE = 1;
+            TMR0 = 0;
             interrupt_counter = 0;
             light_counter++;
-            //????????? ??????, ???????? ???????? ????
-            blink();
-            //???? ???? ??????? ???-?? ??? - ???????? ??????? ????????
             if (light_counter == LIGHT_LIMIT) {
                 turn_flag = 1;
                 light_counter = 0;
@@ -105,6 +106,14 @@ void interrupt isr() {
         TMR0IF = 0;
     }
     
+    if (TMR2IF) {
+        upgrade_timer++;
+        if (upgrade_timer == UPGRADE_LIMIT) {
+            cr_limit = 6800;
+            T2CON = 0b00000000;
+        }
+        TMR2IF = 0;
+    }
 }
 
 void main(void) {
