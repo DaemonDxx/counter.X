@@ -45,6 +45,9 @@ unsigned long interrupt_time = 0;
 char prog_mode = 0;
 char prog_init_flag = 0;
 unsigned long catch_prog_mode_time = 0;
+char now_bit = 0;
+char index = 0;
+char array[24] = {};
 
 
 //Функция поворота счетного механизма
@@ -131,8 +134,28 @@ void interrupt isr() {
                     catch_prog_mode_time = 0;
                 }
             }
-            
-            
+        }
+        if (prog_mode && prog_init_flag) {
+            if (!catch_prog_mode_time) {
+                catch_prog_mode_time = time;
+            } else {
+                unsigned long delta = time - catch_prog_mode_time;
+                if ((delta > 57) && (delta < 90)) {
+                    now_bit = 1;
+                } 
+                if ((delta > 57) && (delta < 90)) {
+                    now_bit = 0;
+                }  
+                if ((delta > 57) && (delta < 90)) {
+                    array[index] = now_bit;
+                    index++;
+                    if (index == 24) {
+                        index = 0;
+                        catch_prog_mode_time = 0;
+                        prog_init_flag = 0;
+                    }
+                } 
+            }
         }
         __delay_us(40);
         start_remember_flag = 1;
