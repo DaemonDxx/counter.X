@@ -43,6 +43,9 @@ unsigned long start_on_light = 0;
 char start_remember_flag = 1;
 unsigned long interrupt_time = 0;
 char prog_mode = 0;
+char prog_init_flag = 0;
+unsigned long catch_prog_mode_time = 0;
+
 
 //Функция поворота счетного механизма
 void turn() {
@@ -116,14 +119,32 @@ void interrupt isr() {
                 light_counter = 0;
             }
         }
+        if (prog_mode && !prog_init_flag) {
+            if (!catch_prog_mode_time) {
+                catch_prog_mode_time = time;
+            } else {
+                unsigned long delta = time - catch_prog_mode_time;
+                if ((delta > 57) && (delta < 90)) {
+                    prog_init_flag = 1;
+                } else {
+                    prog_mode = 0;
+                    catch_prog_mode_time = 0;
+                }
+            }
+            
+            
+        }
         __delay_us(40);
         start_remember_flag = 1;
+        
         RABIF = 0;
     } else {
-        time++;
-        TMR2IF = 0;
+        
     }
-    
+    if (TMR2IF) {
+       time++;
+       TMR2IF = 0; 
+    }
 }
 
 void main(void) {
@@ -132,7 +153,7 @@ void main(void) {
         if (turn_flag) {
             turn();
         }
-        if ((time - start_on_light >= TIME_ON_LIGHT) && !RC0) {
+        if ((time - start_on_light >= TIME_ON_LIGHT) && !RC0 && !prog_mode) {
             PORTCbits.RC0 = 1;
         }
         if (time > 4294967200) {
