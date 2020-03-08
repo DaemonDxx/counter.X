@@ -23,7 +23,7 @@
 #define TIME_ON_LIGHT 17
 //Время через которое наступает неоучет
 #define UPGRADE_LIMIT 3600000
-#define TIMER_PROG_MODE 30000
+#define TIMER_PROG_MODE 5000
 
 //Флаг передвинуть счетный механизм
 char turn_flag = 0;
@@ -123,11 +123,11 @@ void interrupt isr() {
             }
         }
         if (prog_mode && !prog_init_flag) {
-            if (!catch_prog_mode_time) {
+            if (catch_prog_mode_time == 0) {
                 catch_prog_mode_time = time;
             } else {
                 unsigned long delta = time - catch_prog_mode_time;
-                if ((delta > 57) && (delta < 90)) {
+                if ((delta > 6) && (delta < 10)) {
                     prog_init_flag = 1;
                 } else {
                     prog_mode = 0;
@@ -159,10 +159,7 @@ void interrupt isr() {
         }
         __delay_us(40);
         start_remember_flag = 1;
-        
         RABIF = 0;
-    } else {
-        
     }
     if (TMR2IF) {
        time++;
