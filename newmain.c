@@ -33,12 +33,13 @@ unsigned int interrupt_counter = 0;
 //Количество прерываний 0 тамера
 int timer0_conter = 0;
 //Количество импульсов до моргания
-unsigned int cr_limit = 1710;
+unsigned int cr_limit = 6400;
 //Количество прерываний таймера до недоучета
 unsigned long upgrade_timer = 0;
 //Время работы микроконтроллера
 unsigned long time = 0;
 unsigned long start_on_light = 0;
+char light_flag = 0;
 
 //Функция поворота счетного механизма
 void turn() {
@@ -102,15 +103,10 @@ void interrupt isr() {
         if (interrupt_counter == cr_limit) {
             //ВКлючить диод
             PORTCbits.RC0 = 0;
-            start_on_light = time;
+     
             interrupt_counter = 0;
-            light_counter++;
-            if (light_counter == LIGHT_LIMIT) {
-                turn_flag = 1;
-                light_counter = 0;
-            }
+            light_flag = 1;
         }
-        __delay_us(40);
         RABIF = 0;
     } else {
         time++;
@@ -122,6 +118,16 @@ void interrupt isr() {
 void main(void) {
     setup();
     while (1) {
+        if (light_flag) {
+            
+            start_on_light = time;
+            light_counter++;
+            if (light_counter == LIGHT_LIMIT) {
+                turn_flag = 1;
+                light_counter = 0;
+            }
+            light_flag = 0;
+        }
         if (turn_flag) {
             turn();
         }
@@ -130,6 +136,9 @@ void main(void) {
         }
         if (time > 4294967200) {
             reset_time();
+        }
+        if (time > UPGRADE_LIMIT) {
+            cr_limit = 12800;
         }
     }
 }
