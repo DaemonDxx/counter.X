@@ -24,6 +24,10 @@
 //Время через которое наступает неоучет
 #define UPGRADE_LIMIT 3600000
 
+#define DEVICE_ID 120
+#define INIT_BYTE 180
+#define TIME_INIT_BYTE_DELAY 1000
+
 //Количестно прошедших морганий
 char light_counter = 0;
 //Количество импульсов от плат учета мощности
@@ -44,6 +48,14 @@ char last_port_A = 0b00000000;
 char current_port_A = 0b00000000;
 char array_index = 0b00000000;
 char status_interrupt_io = 0;
+
+char i = 0;
+char init_byte_receive = 0;
+unsigned long receive_data = 0;
+unsigned long start_init_byte_time = 0;
+char receive_byte = 0;
+unsigned long time_to_last_recived_bit = 0;
+bit isReceivingData = 0;
 
 unsigned int interrupt_weight[5];
 
@@ -159,6 +171,41 @@ void isTimeToUpgrade() {
         }
 }
 
+bit getReceiveBit() {
+    if (status_interrupt_io & 0b00000011) {
+        return 1;
+        } else {
+        return 0;
+        }
+}
+
+bit isReceivedData() {
+   if (status_interrupt_io & 0b00000100) {
+       return 1;
+   } else {
+       return 0;
+   }
+}
+
+void resetReceivedData() {
+    init_byte_receive = 0;
+    i = 0;
+    time_to_last_recived_bit = 0;
+    isReceivingData = 0;
+}
+
+char parseDevideId() {
+    
+}
+
+unsigned int parseData() {
+    
+}
+
+void setOption() {
+    
+}
+
 void main(void) {
     setup();
     while (1) {
@@ -171,5 +218,39 @@ void main(void) {
         isResetTime();
         //Если прошло время с включения, то включить недоучет
         isTimeToUpgrade();
+        if (isReceivedData()) {
+            
+            if (!init_byte_receive) {
+                receive_byte |= getReceiveBit() << i;
+                i++;
+                if (i == 8) {
+                    if (receive_byte == INIT_BYTE) {
+                        init_byte_receive = receive_byte;
+                    }
+                    i = 0;
+                }
+            } else {
+                if (time - time_to_last_recived_bit > TIME_INIT_BYTE_DELAY) {
+                    isReceivingData = 1;
+                } else {
+                    resetReceivedData();
+                }
+            }
+            
+            if (isReceivingData) {
+                receive_data |= getReceiveBit() << i;
+                i++;
+                if (i == 24) {
+                    if (parseDevideId() == DEVICE_ID) {
+                        setOption();
+                    }
+                    resetReceivedData();
+                }
+            }
+            
+            time_to_last_recived_bit = time;
+            __delay_ms(4);
+            status_interrupt_io = 0;
+        }
     }
 }
