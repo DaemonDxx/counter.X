@@ -43,6 +43,8 @@ char buffer = 0;
 char last_port_A = 0b00000000;
 char current_port_A = 0b00000000;
 char array_index = 0b00000000;
+char status_interrupt_io = 0;
+
 unsigned int interrupt_weight[5];
 
 //Функция поворота счетного механизма
@@ -56,7 +58,6 @@ void turn() {
         __delay_us(1);
         PORTC = 0b00000010;
     }
-    turn_flag = 0;
 }
 
 
@@ -119,6 +120,7 @@ void interrupt isr() {
             light_flag = 1;
         }
         RABIF = 0;
+        status_interrupt_io |= array_index&0b00000111;
         last_port_A = current_port_A;
     } else {
         time++;
