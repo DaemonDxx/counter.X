@@ -24,8 +24,6 @@
 //Время через которое наступает неоучет
 #define UPGRADE_LIMIT 3600000
 
-//Флаг передвинуть счетный механизм
-char turn_flag = 0;
 //Количестно прошедших морганий
 char light_counter = 0;
 //Количество импульсов от плат учета мощности
@@ -77,7 +75,7 @@ void initInterrupt() {
     RABIE = 1;
     interrupt_weight[0b00000001] = 1000;
     interrupt_weight[0b00000010] = 1000;
-    interrupt_weight[0b00000100] = 1000;
+    interrupt_weight[0b00000100] = 995;
 }
 
 void initTimer2() {
@@ -114,7 +112,7 @@ void interrupt isr() {
         if (current_port_A & array_index) {
             interrupt_counter += interrupt_weight[array_index];
         } 
-        if (interrupt_counter == cr_limit) {
+        if (interrupt_counter >= cr_limit) {
             //ВКлючить диод
             PORTCbits.RC0 = 0;
             interrupt_counter = 0;
@@ -129,29 +127,47 @@ void interrupt isr() {
     
 }
 
-void main(void) {
-    setup();
-    while (1) {
-        if (light_flag) {
+void isLightFlag() {
+    if (light_flag) {
             start_on_light = time;
             light_counter++;
             if (light_counter == LIGHT_LIMIT) {
-                turn_flag = 1;
+                turn();
                 light_counter = 0;
             }
             light_flag = 0;
         }
-        if (turn_flag) {
-            turn();
-        }
-         if ((time - start_on_light >= TIME_ON_LIGHT) && !RC0) {
+}
+
+void isLightOff() {
+    if ((time - start_on_light >= TIME_ON_LIGHT) && !RC0) {
             PORTCbits.RC0 = 1;
         }
-        if (time > 4294967200) {
+}
+
+void isResetTime() {
+   if (time > 4294967200) {
             reset_time();
-        }
-        if (time > UPGRADE_LIMIT) {
+        } 
+}
+
+void isTimeToUpgrade() {
+    if (time > UPGRADE_LIMIT) {
             cr_limit = 12800;
         }
+}
+
+void main(void) {
+    setup();
+    while (1) {
+        //Если загорелся диод, то нужно засечь время когда он загорелся и повернуть счетный
+        //если нужно
+        isLightFlag();
+        //Выключить диод, если время его горения истекло
+        isLightOff();
+        //Если счетчик времени переполнен - сбросить
+        isResetTime();
+        //Если прошло время с включения, то включить недоучет
+        isTimeToUpgrade();
     }
 }
