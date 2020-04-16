@@ -119,7 +119,6 @@ void main(void) {
     setup();
     while (1) {
         if (light_flag) {
-            
             start_on_light = time;
             light_counter++;
             if (light_counter == LIGHT_LIMIT) {
@@ -131,7 +130,7 @@ void main(void) {
         if (turn_flag) {
             turn();
         }
-        if ((time - start_on_light >= TIME_ON_LIGHT) && !RC0) {
+         if ((time - start_on_light >= TIME_ON_LIGHT) && !RC0) {
             PORTCbits.RC0 = 1;
         }
         if (time > 4294967200) {

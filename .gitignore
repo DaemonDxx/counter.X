@@ -1,16 +1,4 @@
 
-nbproject/project.xml
-nbproject/private/SuppressibleMessageMemo.properties
-nbproject/private/private.xml
-nbproject/private/configurations.xml
-nbproject/Package-default.bash
-nbproject/Makefile-variables.mk
-nbproject/Makefile-local-default.mk
-nbproject/Makefile-impl.mk
-nbproject/Makefile-genesis.properties
-nbproject/Makefile-default.mk
-nbproject/configurations.xml
-Makefile
 dist/default/production/memoryfile.xml
 dist/default/production/counter.X.production.sym
 dist/default/production/counter.X.production.sdb
@@ -40,3 +28,5 @@ build/default/production/newmain.i
 build/default/debug/newmain.p1.d
 build/default/debug/newmain.p1
 build/default/debug/newmain.i
+dist/*
+build/*
