@@ -29,17 +29,23 @@ char turn_flag = 0;
 //Количестно прошедших морганий
 char light_counter = 0;
 //Количество импульсов от плат учета мощности
-unsigned int interrupt_counter = 0;
+unsigned long interrupt_counter = 0;
 //Количество прерываний 0 тамера
 int timer0_conter = 0;
 //Количество импульсов до моргания
-unsigned int cr_limit = 6400;
+unsigned long cr_limit = 437000;
 //Количество прерываний таймера до недоучета
 unsigned long upgrade_timer = 0;
 //Время работы микроконтроллера
 unsigned long time = 0;
 unsigned long start_on_light = 0;
 char light_flag = 0;
+char buffer = 0;
+
+char last_port_A = 0b00000000;
+char current_port_A = 0b00000000;
+char array_index = 0b00000000;
+unsigned int interrupt_weight[5];
 
 //Функция поворота счетного механизма
 void turn() {
@@ -69,6 +75,9 @@ void initInterrupt() {
     GIE = 1;
     PEIE = 1;
     RABIE = 1;
+    interrupt_weight[0b00000001] = 1000;
+    interrupt_weight[0b00000010] = 1000;
+    interrupt_weight[0b00000100] = 1000;
 }
 
 void initTimer2() {
@@ -99,15 +108,20 @@ void reset_time() {
 void interrupt isr() {  
     //Обработка сигнала от модулей измерения мощности
     if (RABIF) {
-        interrupt_counter++;
+        buffer = PORTA;
+        current_port_A = ~(((((buffer << 1) & 0b00001000)|buffer)>>3)&0b00000111);
+        array_index = current_port_A^last_port_A;
+        if (current_port_A & array_index) {
+            interrupt_counter += interrupt_weight[array_index];
+        } 
         if (interrupt_counter == cr_limit) {
             //ВКлючить диод
             PORTCbits.RC0 = 0;
-     
             interrupt_counter = 0;
             light_flag = 1;
         }
         RABIF = 0;
+        last_port_A = current_port_A;
     } else {
         time++;
         TMR2IF = 0;
