@@ -27,6 +27,7 @@
 #define DEVICE_ID 120
 #define INIT_BYTE 180
 #define TIME_INIT_BYTE_DELAY 1000
+#define TIMEOUT_RECIVE_BIT 5000
 
 //Количестно прошедших морганий
 char light_counter = 0;
@@ -192,6 +193,8 @@ void resetReceivedData() {
     i = 0;
     time_to_last_recived_bit = 0;
     isReceivingData = 0;
+    receive_data = 0;
+    receive_byte = 0;
 }
 
 char parseDevideId() {
@@ -206,6 +209,12 @@ void setOption() {
     
 }
 
+void checkTimeoutReceiveBit() {
+    if (time - time_to_last_recived_bit > TIMEOUT_RECIVE_BIT) {
+        resetReceivedData();
+    }
+}
+
 void main(void) {
     setup();
     while (1) {
@@ -218,8 +227,11 @@ void main(void) {
         isResetTime();
         //Если прошло время с включения, то включить недоучет
         isTimeToUpgrade();
+        //Проверяем, если данных не было более n секунд, то сбрасываем все принятые данные
+        checkTimeoutReceiveBit();
         if (isReceivedData()) {
             
+            //Если init_byte еще нет, то формируем его
             if (!init_byte_receive) {
                 receive_byte |= getReceiveBit() << i;
                 i++;
@@ -229,7 +241,8 @@ void main(void) {
                     }
                     i = 0;
                 }
-            } else {
+            //Если init_byte есть, и чтение данных не началось, проверяем паузу
+            } else if (!isReceivingData) {
                 if (time - time_to_last_recived_bit > TIME_INIT_BYTE_DELAY) {
                     isReceivingData = 1;
                 } else {
@@ -237,6 +250,7 @@ void main(void) {
                 }
             }
             
+            //Если идет чтение данных, то читаем;
             if (isReceivingData) {
                 receive_data |= getReceiveBit() << i;
                 i++;
