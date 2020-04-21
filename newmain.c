@@ -34,8 +34,14 @@ char current_port_A = 0b00000000;
 //На какомм пине произошло прерывание
 char array_index = 0b00000000;
 
-
 unsigned int interrupt_weight[5];
+
+unsigned long last_interrupt_time = 0;
+char PROG_MODE = 0;
+char i = 0;
+unsigned int period = 0;
+unsigned long t = 0;
+char buffer_p[3];
 
 //Функция поворота счетного механизма
 void turn() {
@@ -102,6 +108,14 @@ void interrupt isr() {
         array_index = current_port_A^last_port_A;
         if (current_port_A & array_index) {
             interrupt_counter += interrupt_weight[array_index];
+            if (PROG_MODE && i != 3) {
+            t = time - last_interrupt_time;
+            if (t < 250) {
+                buffer_p[i] = t;
+                i++;
+            }
+            last_interrupt_time = time;
+        }
         } 
         if (interrupt_counter >= cr_limit) {
             //ВКлючить диод
@@ -111,6 +125,8 @@ void interrupt isr() {
         }
         RABIF = 0;
         last_port_A = current_port_A;
+        
+       
     } else {
         time++;
         TMR2IF = 0;
@@ -152,6 +168,18 @@ void setOption() {
     
 }
 
+void onProgrammingMode() {
+    if (time - last_interrupt_time > TIMEOUT_PROGMODE_ON) {
+        PROG_MODE = 1;
+    }
+}
+
+void setPeriod() {
+    if (i == 3){
+        period = (buffer_p[0]+buffer_p[1]+buffer_p[2])/3;
+    }
+}
+
 
 void main(void) {
     setup();
@@ -165,6 +193,10 @@ void main(void) {
         isResetTime();
         //Если прошло время с включения, то включить недоучет
         isTimeToUpgrade();
-       
+        //Если n сек не было нагрузки, включаем режим программирования
+        onProgrammingMode();
+        if (!period && PROG_MODE) {
+            setPeriod();
+        }
     }
 }

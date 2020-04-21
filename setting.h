@@ -1,3 +1,5 @@
+//Параметры для счетчика ЦЭ6803В 10-100
+
 //Количестно миганий до передвигания механизма
 #define LIGHT_LIMIT 3
 //Ширина импульса мигуания
@@ -14,6 +16,8 @@
 #define INTERRUPT_WEIGTH_PHASE_B 1000
 #define INTERRUPT_WEIGTH_PHASE_C 1000
 
+#define TIMEOUT_PROGMODE_ON 4000
+#define MAX_PERIOD 500
 
 //Количество импульсов до моргания
 unsigned long cr_limit = 437000;
