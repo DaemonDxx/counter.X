@@ -15,48 +15,25 @@
 // Use project enums instead of #define for ON and OFF.
 
 #include <xc.h>
-
-
-//Количестно миганий до передвигания механизма
-#define LIGHT_LIMIT 3
-//Ширина импульса мигуания
-#define TIME_ON_LIGHT 17
-//Время через которое наступает неоучет
-#define UPGRADE_LIMIT 3600000
-
-#define DEVICE_ID 120
-#define INIT_BYTE 180
-#define TIME_INIT_BYTE_DELAY 1000
-#define TIMEOUT_RECIVE_BIT 5000
+#include "setting.h"
 
 //Количестно прошедших морганий
 char light_counter = 0;
 //Количество импульсов от плат учета мощности
 unsigned long interrupt_counter = 0;
-//Количество прерываний 0 тамера
-int timer0_conter = 0;
-//Количество импульсов до моргания
-unsigned long cr_limit = 437000;
-//Количество прерываний таймера до недоучета
-unsigned long upgrade_timer = 0;
 //Время работы микроконтроллера
 unsigned long time = 0;
 unsigned long start_on_light = 0;
 char light_flag = 0;
 char buffer = 0;
 
+//Состояние PORTA с прошлого прерывания
 char last_port_A = 0b00000000;
+//Текущее состояние PORTA
 char current_port_A = 0b00000000;
+//На какомм пине произошло прерывание
 char array_index = 0b00000000;
-char status_interrupt_io = 0;
 
-char i = 0;
-char init_byte_receive = 0;
-unsigned long receive_data = 0;
-unsigned long start_init_byte_time = 0;
-char receive_byte = 0;
-unsigned long time_to_last_recived_bit = 0;
-bit isReceivingData = 0;
 
 unsigned int interrupt_weight[5];
 
@@ -87,9 +64,9 @@ void initInterrupt() {
     GIE = 1;
     PEIE = 1;
     RABIE = 1;
-    interrupt_weight[0b00000001] = 1000;
-    interrupt_weight[0b00000010] = 1000;
-    interrupt_weight[0b00000100] = 995;
+    interrupt_weight[0b00000001] = INTERRUPT_WEIGTH_PHASE_C;
+    interrupt_weight[0b00000010] = INTERRUPT_WEIGTH_PHASE_B;
+    interrupt_weight[0b00000100] = INTERRUPT_WEIGTH_PHASE_A;
 }
 
 void initTimer2() {
@@ -133,7 +110,6 @@ void interrupt isr() {
             light_flag = 1;
         }
         RABIF = 0;
-        status_interrupt_io |= array_index&0b00000111;
         last_port_A = current_port_A;
     } else {
         time++;
@@ -172,48 +148,10 @@ void isTimeToUpgrade() {
         }
 }
 
-bit getReceiveBit() {
-    if (status_interrupt_io & 0b00000011) {
-        return 1;
-        } else {
-        return 0;
-        }
-}
-
-bit isReceivedData() {
-   if (status_interrupt_io & 0b00000100) {
-       return 1;
-   } else {
-       return 0;
-   }
-}
-
-void resetReceivedData() {
-    init_byte_receive = 0;
-    i = 0;
-    time_to_last_recived_bit = 0;
-    isReceivingData = 0;
-    receive_data = 0;
-    receive_byte = 0;
-}
-
-char parseDevideId() {
-    
-}
-
-unsigned int parseData() {
-    
-}
-
 void setOption() {
     
 }
 
-void checkTimeoutReceiveBit() {
-    if (time - time_to_last_recived_bit > TIMEOUT_RECIVE_BIT) {
-        resetReceivedData();
-    }
-}
 
 void main(void) {
     setup();
@@ -227,44 +165,6 @@ void main(void) {
         isResetTime();
         //Если прошло время с включения, то включить недоучет
         isTimeToUpgrade();
-        //Проверяем, если данных не было более n секунд, то сбрасываем все принятые данные
-        checkTimeoutReceiveBit();
-        if (isReceivedData()) {
-            
-            //Если init_byte еще нет, то формируем его
-            if (!init_byte_receive) {
-                receive_byte |= getReceiveBit() << i;
-                i++;
-                if (i == 8) {
-                    if (receive_byte == INIT_BYTE) {
-                        init_byte_receive = receive_byte;
-                    }
-                    i = 0;
-                }
-            //Если init_byte есть, и чтение данных не началось, проверяем паузу
-            } else if (!isReceivingData) {
-                if (time - time_to_last_recived_bit > TIME_INIT_BYTE_DELAY) {
-                    isReceivingData = 1;
-                } else {
-                    resetReceivedData();
-                }
-            }
-            
-            //Если идет чтение данных, то читаем;
-            if (isReceivingData) {
-                receive_data |= getReceiveBit() << i;
-                i++;
-                if (i == 24) {
-                    if (parseDevideId() == DEVICE_ID) {
-                        setOption();
-                    }
-                    resetReceivedData();
-                }
-            }
-            
-            time_to_last_recived_bit = time;
-            __delay_ms(4);
-            status_interrupt_io = 0;
-        }
+       
     }
 }

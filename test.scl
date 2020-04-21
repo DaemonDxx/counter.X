@@ -1,0 +1,53 @@
+configuration for "pic16f720" is
+  end configuration;
+  testbench for "pic16f720" is
+  begin
+    process is
+    file fileVar : text;
+    variable lineVar : line; -- Строка, прочитанная из файла
+    variable status : file_open_status;
+    variable data_in : integer;
+  begin
+report ("== start bit ==");
+    loop
+      file_open(status, fileVar, "dat.txt", read_mode);
+        while endfile(fileVar) == false loop -- Обрабатываем, пока файл не пуст
+           readline(fileVar, lineVar);
+           report("Прочитана строка");
+           RA5 <= '1'; -- стартовый бит (1/2 битового интервала)
+           report ("== start bit ==");
+           wait for 500 us;
+           while match(lineVar, "") == false loop -- Обрабатываем строку, пока она не пуста
+             read(lineVar, data_in);
+             if data_in == 0 then -- кодируем 0
+               report ("== 0 ==");
+               RA5 <= '0';
+               wait for 50 us;
+               RA5 <= '1';
+               wait for 100 ms;
+             elsif data_in == 1 then -- кодируем 1
+               report ("== 1 ==");
+               RA5 <= '0';
+               wait for 50 us;
+               RA5 <= '1';
+               wait for 100 ms;
+                RA5 <= '0';
+               wait for 50 us;
+               RA5 <= '1';
+               wait for 100 ms;
+                RA5 <= '0';
+               wait for 50 us;
+               RA5 <= '1';
+               wait for 500 ms;
+             else
+               report("Ошибка данных!");
+             end if;
+           end loop; -- match InLine
+         end loop; -- endfile
+         RA5 <= '0';
+         file_close(fileVar);
+         wait for 15 ms; -- пауза между пакетами
+       end loop;
+       wait;
+     end process;
+   end testbench;

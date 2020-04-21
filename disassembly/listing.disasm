@@ -1,0 +1,882 @@
+Disassembly Listing for counter
+Generated From:
+C:/Users/one/Documents/GitHub/counter.X/dist/default/debug/counter.X.debug.elf
+19.04.2020 18:14:01
+
+---  C:/Users/one/Documents/GitHub/counter.X/newmain.c  -------------------------------------------------
+1:             #define _XTAL_FREQ 16000000 
+2:             // CONFIG1
+3:             #pragma config FOSC = INTOSCIO  // Oscillator Selection bits (INTOSCIO oscillator: I/O function on RA4/CLKO pin, I/O function on RA5/CLKI)
+4:             #pragma config WDTE = OFF       // Watchdog Timer Enable bit (WDT enabled)
+5:             #pragma config PWRTE = OFF      // Power-up Timer Enable bit (PWRT disabled)
+6:             #pragma config MCLRE = ON       // RA3/MCLR/VPP Pin Function Select bit (RA3/MCLR/VPP pin function is MCLR; Weak pull-up enabled.)
+7:             #pragma config CP = OFF         // Flash Program Memory Code Protection bit (Code protection off)
+8:             #pragma config BOREN = ON       // Brown-out Reset Enable bits (Brown-out Reset enabled)
+9:             #pragma config PLLEN = ON       // INTOSC PLLEN Enable Bit (INTOSC Frequency is 16 MHz (32x))
+10:            
+11:            // CONFIG2
+12:            #pragma config WRTEN = OFF      // Flash memory self-write protection bits (Write protection off)
+13:            
+14:            // #pragma config statements should precede project file includes.
+15:            // Use project enums instead of #define for ON and OFF.
+16:            
+17:            #include <xc.h>
+18:            
+19:            
+20:            //Количестно миганий до передвигания механизма
+21:            #define LIGHT_LIMIT 3
+22:            //Ширина импульса мигуания
+23:            #define TIME_ON_LIGHT 17
+24:            //Время через которое наступает неоучет
+25:            #define UPGRADE_LIMIT 3600000
+26:            
+27:            #define DEVICE_ID 120
+28:            #define INIT_BYTE 180
+29:            #define TIME_INIT_BYTE_DELAY 1000
+30:            #define TIMEOUT_RECIVE_BIT 5000
+31:            
+32:            //Количестно прошедших морганий
+33:            char light_counter = 0;
+34:            //Количество импульсов от плат учета мощности
+35:            unsigned long interrupt_counter = 0;
+36:            //Количество прерываний 0 тамера
+37:            int timer0_conter = 0;
+38:            //Количество импульсов до моргания
+39:            unsigned long cr_limit = 437000;
+40:            //Количество прерываний таймера до недоучета
+41:            unsigned long upgrade_timer = 0;
+42:            //Время работы микроконтроллера
+43:            unsigned long time = 0;
+44:            unsigned long start_on_light = 0;
+45:            char light_flag = 0;
+46:            char buffer = 0;
+47:            
+48:            char last_port_A = 0b00000000;
+49:            char current_port_A = 0b00000000;
+50:            char array_index = 0b00000000;
+51:            char status_interrupt_io = 0;
+52:            
+53:            char i = 0;
+54:            char init_byte_receive = 0;
+55:            unsigned long receive_data = 0;
+56:            unsigned long start_init_byte_time = 0;
+57:            char receive_byte = 0;
+58:            unsigned long time_to_last_recived_bit = 0;
+59:            bit isReceivingData = 0;
+60:            
+61:            unsigned int interrupt_weight[5];
+62:            
+63:            //Функция поворота счетного механизма
+64:            void turn() {
+0218  1C87     BTFSS PORTC, 0x1
+0219  2A22     GOTO 0x222
+65:                if (RC1) {
+66:                    PORTC = 0b00000000;
+021A  0187     CLRF PORTC
+67:                    __delay_us(1);
+021B  2A1C     GOTO 0x21C
+021C  2A1D     GOTO 0x21D
+68:                    PORTC = 0b00000101;
+021D  3005     MOVLW 0x5
+021E  1283     BCF STATUS, 0x5
+021F  1303     BCF STATUS, 0x6
+0220  0087     MOVWF PORTC
+69:                } else {
+0221  0008     RETURN
+70:                    PORTC = 0b00000000;
+0222  0187     CLRF PORTC
+71:                    __delay_us(1);
+0223  2A24     GOTO 0x224
+0224  2A25     GOTO 0x225
+72:                    PORTC = 0b00000010;
+0225  3002     MOVLW 0x2
+0226  1283     BCF STATUS, 0x5
+0227  1303     BCF STATUS, 0x6
+0228  0087     MOVWF PORTC
+73:                }
+74:            }
+0229  0008     RETURN
+75:            
+76:            
+77:            void initPIN() {
+022A  3034     MOVLW 0x34
+022B  1683     BSF STATUS, 0x5
+022C  0085     MOVWF TRISA
+78:                TRISA = 0b00110100;
+79:                TRISC = 0b00000000;
+022D  0187     CLRF TRISC
+80:                ANSELC = 0x00;
+022E  1703     BSF STATUS, 0x6
+022F  0187     CLRF ANSELC
+81:                ANSELA = 0x00;
+0230  0185     CLRF ANSELA
+82:                PORTCbits.RC0 = 1;
+0231  1283     BCF STATUS, 0x5
+0232  1303     BCF STATUS, 0x6
+0233  1407     BSF PORTC, 0x0
+83:            }
+0234  0008     RETURN
+84:            
+85:            void initInterrupt() {
+01F0  3034     MOVLW 0x34
+01F1  1683     BSF STATUS, 0x5
+01F2  0096     MOVWF IOCA
+86:                IOCA = 0b00110100;
+87:                GIE = 1;
+01F3  178B     BSF INTCON, 0x7
+88:                PEIE = 1;
+01F4  170B     BSF INTCON, 0x6
+89:                RABIE = 1;
+01F5  158B     BSF INTCON, 0x3
+90:                interrupt_weight[0b00000001] = 1000;
+01F6  30E8     MOVLW 0xE8
+01F7  1283     BCF STATUS, 0x5
+01F8  00A2     MOVWF 0x22
+01F9  3003     MOVLW 0x3
+01FA  00A3     MOVWF 0x23
+91:                interrupt_weight[0b00000010] = 1000;
+01FB  30E8     MOVLW 0xE8
+01FC  00A4     MOVWF 0x24
+01FD  3003     MOVLW 0x3
+01FE  00A5     MOVWF 0x25
+92:                interrupt_weight[0b00000100] = 995;
+01FF  30E3     MOVLW 0xE3
+0200  00A8     MOVWF 0x28
+0201  3003     MOVLW 0x3
+0202  00A9     MOVWF 0x29
+93:            }
+0203  0008     RETURN
+94:            
+95:            void initTimer2() {
+0246  3007     MOVLW 0x7
+0247  1283     BCF STATUS, 0x5
+0248  0092     MOVWF T2CON
+96:                T2CON = 0b00000111;
+97:                PIE1bits.TMR2IE = 1;
+0249  1683     BSF STATUS, 0x5
+024A  148C     BSF PIE1, 0x1
+98:                PR2 = 250;
+024B  30FA     MOVLW 0xFA
+024C  0092     MOVWF PR2
+99:            }
+024D  0008     RETURN
+100:           
+101:           void initTimer0() {
+0267  30D3     MOVLW 0xD3
+0268  1683     BSF STATUS, 0x5
+0269  0081     MOVWF OPTION_REG
+102:               OPTION_REG = 0b11010011;
+103:           }
+026A  0008     RETURN
+104:           
+105:           
+106:           void setup() {
+0256  222A     CALL 0x22A
+107:               initPIN();
+108:               initInterrupt();
+0257  21F0     CALL 0x1F0
+109:               initTimer0();   
+0258  2267     CALL 0x267
+110:               initTimer2();
+0259  2246     CALL 0x246
+111:               OSCCONbits.IRCF0 = 1;
+025A  1610     BSF OSCCON, 0x4
+112:               OSCCONbits.IRCF1 = 1;
+025B  1690     BSF OSCCON, 0x5
+113:           }
+025C  0008     RETURN
+114:           
+115:           
+116:           void reset_time() {
+0235  3000     MOVLW 0x0
+0236  00BD     MOVWF 0xBD
+0237  3000     MOVLW 0x0
+0238  00BC     MOVWF 0xBC
+0239  3000     MOVLW 0x0
+023A  00BB     MOVWF 0xBB
+023B  3000     MOVLW 0x0
+023C  00BA     MOVWF 0xBA
+117:               time = 0;
+118:           }
+023D  0008     RETURN
+119:           
+120:           void interrupt isr() {  
+0004  00FE     MOVWF 0xFE
+00C4  1C0B     BTFSS INTCON, 0x0
+00C5  2932     GOTO 0x132
+121:               //Обработка сигнала от модулей измерения мощности
+122:               if (RABIF) {
+123:                   buffer = PORTA;
+00C6  1283     BCF STATUS, 0x5
+00C7  1303     BCF STATUS, 0x6
+00C8  0805     MOVF PORTA, W
+00C9  00F0     MOVWF __pcstackCOMMON
+00CA  0870     MOVF __pcstackCOMMON, W
+00CB  00CC     MOVWF buffer
+124:                   current_port_A = ~(((((buffer << 1) & 0b00001000)|buffer)>>3)&0b00000111);
+00CC  084C     MOVF buffer, W
+00CD  00F0     MOVWF __pcstackCOMMON
+00CE  0770     ADDWF __pcstackCOMMON, W
+00CF  3908     ANDLW 0x8
+00D0  044C     IORWF buffer, W
+00D1  00F1     MOVWF 0x71
+00D2  3003     MOVLW 0x3
+00D3  1003     BCF STATUS, 0x0
+00D4  0CF1     RRF 0x71, F
+00D5  3EFF     ADDLW 0xFF
+00D6  1D03     BTFSS STATUS, 0x2
+00D7  28D3     GOTO 0xD3
+00D8  0871     MOVF 0x71, W
+00D9  3907     ANDLW 0x7
+00DA  3AFF     XORLW 0xFF
+00DB  00F2     MOVWF 0x72
+00DC  0872     MOVF 0x72, W
+00DD  00FC     MOVWF current_port_A
+125:                   array_index = current_port_A^last_port_A;
+00DE  087C     MOVF current_port_A, W
+00DF  064B     XORWF last_port_A, W
+00E0  00F0     MOVWF __pcstackCOMMON
+00E1  0870     MOVF __pcstackCOMMON, W
+00E2  00FB     MOVWF array_index
+126:                   if (current_port_A & array_index) {
+00E3  087C     MOVF current_port_A, W
+00E4  057B     ANDWF array_index, W
+00E5  1903     BTFSC STATUS, 0x2
+00E6  290C     GOTO 0x10C
+127:                       interrupt_counter += interrupt_weight[array_index];
+00E7  087B     MOVF array_index, W
+00E8  00F0     MOVWF __pcstackCOMMON
+00E9  0770     ADDWF __pcstackCOMMON, W
+00EA  3E20     ADDLW 0x20
+00EB  0084     MOVWF FSR
+00EC  1383     BCF STATUS, 0x7
+00ED  0800     MOVF INDF, W
+00EE  00F1     MOVWF 0x71
+00EF  0A84     INCF FSR, F
+00F0  0800     MOVF INDF, W
+00F1  00F2     MOVWF 0x72
+00F2  0871     MOVF 0x71, W
+00F3  00F3     MOVWF 0x73
+00F4  0872     MOVF 0x72, W
+00F5  00F4     MOVWF 0x74
+00F6  01F5     CLRF 0x75
+00F7  01F6     CLRF 0x76
+00F8  0873     MOVF 0x73, W
+00F9  07C2     ADDWF interrupt_counter, F
+00FA  0874     MOVF 0x74, W
+00FB  1103     BCF STATUS, 0x2
+00FC  1803     BTFSC STATUS, 0x0
+00FD  3E01     ADDLW 0x1
+00FE  1D03     BTFSS STATUS, 0x2
+00FF  07C3     ADDWF 0x43, F
+0100  0875     MOVF 0x75, W
+0101  1103     BCF STATUS, 0x2
+0102  1803     BTFSC STATUS, 0x0
+0103  3E01     ADDLW 0x1
+0104  1D03     BTFSS STATUS, 0x2
+0105  07C4     ADDWF 0x44, F
+0106  0876     MOVF 0x76, W
+0107  1103     BCF STATUS, 0x2
+0108  1803     BTFSC STATUS, 0x0
+0109  3E01     ADDLW 0x1
+010A  1D03     BTFSS STATUS, 0x2
+010B  07C5     ADDWF 0x45, F
+128:                   } 
+129:                   if (interrupt_counter >= cr_limit) {
+010C  085D     MOVF 0x5D, W
+010D  0245     SUBWF 0x45, W
+010E  1D03     BTFSS STATUS, 0x2
+010F  291A     GOTO 0x11A
+0110  085C     MOVF 0x5C, W
+0111  0244     SUBWF 0x44, W
+0112  1D03     BTFSS STATUS, 0x2
+0113  291A     GOTO 0x11A
+0114  085B     MOVF 0x5B, W
+0115  0243     SUBWF 0x43, W
+0116  1D03     BTFSS STATUS, 0x2
+0117  291A     GOTO 0x11A
+0118  085A     MOVF cr_limit, W
+0119  0242     SUBWF interrupt_counter, W
+011A  1C03     BTFSS STATUS, 0x0
+011B  2927     GOTO 0x127
+130:                       //ВКлючить диод
+131:                       PORTCbits.RC0 = 0;
+011C  1007     BCF PORTC, 0x0
+132:                       interrupt_counter = 0;
+011D  3000     MOVLW 0x0
+011E  00C5     MOVWF 0x45
+011F  3000     MOVLW 0x0
+0120  00C4     MOVWF 0x44
+0121  3000     MOVLW 0x0
+0122  00C3     MOVWF 0x43
+0123  3000     MOVLW 0x0
+0124  00C2     MOVWF interrupt_counter
+133:                       light_flag = 1;
+0125  01CD     CLRF light_flag
+0126  0ACD     INCF light_flag, F
+134:                   }
+135:                   RABIF = 0;
+0127  100B     BCF INTCON, 0x0
+136:                   status_interrupt_io |= array_index&0b00000111;
+0128  087B     MOVF array_index, W
+0129  3907     ANDLW 0x7
+012A  00F0     MOVWF __pcstackCOMMON
+012B  0870     MOVF __pcstackCOMMON, W
+012C  04CA     IORWF status_interrupt_io, F
+137:                   last_port_A = current_port_A;
+012D  087C     MOVF current_port_A, W
+012E  00F0     MOVWF __pcstackCOMMON
+012F  0870     MOVF __pcstackCOMMON, W
+0130  00CB     MOVWF last_port_A
+138:               } else {
+0131  2943     GOTO 0x143
+139:                   time++;
+0132  3001     MOVLW 0x1
+0133  1283     BCF STATUS, 0x5
+0134  1303     BCF STATUS, 0x6
+0135  07BA     ADDWF time, F
+0136  3000     MOVLW 0x0
+0137  1803     BTFSC STATUS, 0x0
+0138  3001     MOVLW 0x1
+0139  07BB     ADDWF 0x3B, F
+013A  3000     MOVLW 0x0
+013B  1803     BTFSC STATUS, 0x0
+013C  3001     MOVLW 0x1
+013D  07BC     ADDWF 0x3C, F
+013E  3000     MOVLW 0x0
+013F  1803     BTFSC STATUS, 0x0
+0140  3001     MOVLW 0x1
+0141  07BD     ADDWF 0x3D, F
+140:                   TMR2IF = 0;
+0142  108C     BCF PIR1, 0x1
+141:               }
+142:               
+143:           }
+0143  0879     MOVF 0x79, W
+0144  008A     MOVWF PCLATH
+0145  0878     MOVF 0x78, W
+0146  0084     MOVWF FSR
+0147  0E77     SWAPF 0x77, W
+0148  0083     MOVWF STATUS
+0149  0EFE     SWAPF 0x7E, F
+014A  0E7E     SWAPF 0x7E, W
+014B  0009     RETFIE
+144:           
+145:           void isLightFlag() {
+01C3  1283     BCF STATUS, 0x5
+01C4  084D     MOVF light_flag, W
+01C5  1903     BTFSC STATUS, 0x2
+01C6  0008     RETURN
+146:               if (light_flag) {
+147:                       start_on_light = time;
+01C7  083D     MOVF 0x3D, W
+01C8  00B9     MOVWF 0x39
+01C9  083C     MOVF 0x3C, W
+01CA  00B8     MOVWF 0x38
+01CB  083B     MOVF 0x3B, W
+01CC  00B7     MOVWF 0x37
+01CD  083A     MOVF time, W
+01CE  00B6     MOVWF start_on_light
+148:                       light_counter++;
+01CF  3001     MOVLW 0x1
+01D0  00CF     MOVWF __pcstackBANK0
+01D1  084F     MOVF __pcstackBANK0, W
+01D2  07CE     ADDWF light_counter, F
+149:                       if (light_counter == LIGHT_LIMIT) {
+01D3  3003     MOVLW 0x3
+01D4  064E     XORWF light_counter, W
+01D5  1D03     BTFSS STATUS, 0x2
+01D6  29D9     GOTO 0x1D9
+150:                           turn();
+01D7  2218     CALL 0x218
+151:                           light_counter = 0;
+01D8  01CE     CLRF light_counter
+152:                       }
+153:                       light_flag = 0;
+01D9  01CD     CLRF light_flag
+154:                   }
+155:           }
+01DA  0008     RETURN
+156:           
+157:           void isLightOff() {
+014C  083A     MOVF time, W
+014D  00CF     MOVWF __pcstackBANK0
+014E  083B     MOVF 0x3B, W
+014F  00D0     MOVWF 0x50
+0150  083C     MOVF 0x3C, W
+0151  00D1     MOVWF 0x51
+0152  083D     MOVF 0x3D, W
+0153  00D2     MOVWF 0x52
+0154  0836     MOVF start_on_light, W
+0155  02CF     SUBWF __pcstackBANK0, F
+0156  0837     MOVF 0x37, W
+0157  1C03     BTFSS STATUS, 0x0
+0158  0F37     INCFSZ 0x37, W
+0159  295B     GOTO 0x15B
+015A  295C     GOTO 0x15C
+015B  02D0     SUBWF 0x50, F
+015C  0838     MOVF 0x38, W
+015D  1C03     BTFSS STATUS, 0x0
+015E  0F38     INCFSZ 0x38, W
+015F  2961     GOTO 0x161
+0160  2962     GOTO 0x162
+0161  02D1     SUBWF 0x51, F
+0162  0839     MOVF 0x39, W
+0163  1C03     BTFSS STATUS, 0x0
+0164  0F39     INCFSZ 0x39, W
+0165  2967     GOTO 0x167
+0166  2968     GOTO 0x168
+0167  02D2     SUBWF 0x52, F
+0168  0852     MOVF 0x52, W
+0169  1D03     BTFSS STATUS, 0x2
+016A  2977     GOTO 0x177
+016B  0851     MOVF 0x51, W
+016C  1D03     BTFSS STATUS, 0x2
+016D  2977     GOTO 0x177
+016E  0850     MOVF 0x50, W
+016F  1D03     BTFSS STATUS, 0x2
+0170  2977     GOTO 0x177
+0171  3011     MOVLW 0x11
+0172  024F     SUBWF __pcstackBANK0, W
+0173  1D03     BTFSS STATUS, 0x2
+0174  2975     GOTO 0x175
+0175  1C03     BTFSS STATUS, 0x0
+0176  0008     RETURN
+0177  1807     BTFSC PORTC, 0x0
+0178  0008     RETURN
+158:               if ((time - start_on_light >= TIME_ON_LIGHT) && !RC0) {
+159:                       PORTCbits.RC0 = 1;
+0179  1407     BSF PORTC, 0x0
+160:                   }
+161:           }
+017A  0008     RETURN
+162:           
+163:           void isResetTime() {
+0204  30FF     MOVLW 0xFF
+0205  023D     SUBWF 0x3D, W
+0206  1D03     BTFSS STATUS, 0x2
+0207  2A14     GOTO 0x214
+0208  30FF     MOVLW 0xFF
+0209  023C     SUBWF 0x3C, W
+020A  1D03     BTFSS STATUS, 0x2
+020B  2A14     GOTO 0x214
+020C  30FF     MOVLW 0xFF
+020D  023B     SUBWF 0x3B, W
+020E  1D03     BTFSS STATUS, 0x2
+020F  2A14     GOTO 0x214
+0210  30A1     MOVLW 0xA1
+0211  023A     SUBWF time, W
+0212  1D03     BTFSS STATUS, 0x2
+0213  2A14     GOTO 0x214
+0214  1C03     BTFSS STATUS, 0x0
+0215  0008     RETURN
+164:              if (time > 4294967200) {
+165:                       reset_time();
+0216  2235     CALL 0x235
+166:                   } 
+167:           }
+0217  0008     RETURN
+168:           
+169:           void isTimeToUpgrade() {
+01A9  083D     MOVF 0x3D, W
+01AA  1D03     BTFSS STATUS, 0x2
+01AB  29BA     GOTO 0x1BA
+01AC  3036     MOVLW 0x36
+01AD  023C     SUBWF 0x3C, W
+01AE  1D03     BTFSS STATUS, 0x2
+01AF  29B8     GOTO 0x1B8
+01B0  30EE     MOVLW 0xEE
+01B1  023B     SUBWF 0x3B, W
+01B2  1D03     BTFSS STATUS, 0x2
+01B3  29B8     GOTO 0x1B8
+01B4  3081     MOVLW 0x81
+01B5  023A     SUBWF time, W
+01B6  1D03     BTFSS STATUS, 0x2
+01B7  29B8     GOTO 0x1B8
+01B8  1C03     BTFSS STATUS, 0x0
+01B9  0008     RETURN
+170:               if (time > UPGRADE_LIMIT) {
+171:                       cr_limit = 12800;
+01BA  3000     MOVLW 0x0
+01BB  00DD     MOVWF 0x5D
+01BC  3000     MOVLW 0x0
+01BD  00DC     MOVWF 0x5C
+01BE  3032     MOVLW 0x32
+01BF  00DB     MOVWF 0x5B
+01C0  3000     MOVLW 0x0
+01C1  00DA     MOVWF cr_limit
+172:                   }
+173:           }
+01C2  0008     RETURN
+174:           
+175:           bit getReceiveBit() {
+024E  084A     MOVF status_interrupt_io, W
+024F  3903     ANDLW 0x3
+0250  1903     BTFSC STATUS, 0x2
+0251  2A54     GOTO 0x254
+176:               if (status_interrupt_io & 0b00000011) {
+177:                   return 1;
+0252  1403     BSF STATUS, 0x0
+0253  0008     RETURN
+178:                   } else {
+179:                   return 0;
+0254  1003     BCF STATUS, 0x0
+180:                   }
+181:           }
+0255  0008     RETURN
+182:           
+183:           bit isReceivedData() {
+025D  1D4A     BTFSS status_interrupt_io, 0x2
+025E  2A61     GOTO 0x261
+184:              if (status_interrupt_io & 0b00000100) {
+185:                  return 1;
+025F  1403     BSF STATUS, 0x0
+0260  0008     RETURN
+186:              } else {
+187:                  return 0;
+0261  1003     BCF STATUS, 0x0
+188:              }
+189:           }
+0262  0008     RETURN
+190:           
+191:           void resetReceivedData() {
+01DB  01C9     CLRF init_byte_receive
+192:               init_byte_receive = 0;
+193:               i = 0;
+01DC  01FA     CLRF i
+194:               time_to_last_recived_bit = 0;
+01DD  3000     MOVLW 0x0
+01DE  00AD     MOVWF 0x2D
+01DF  3000     MOVLW 0x0
+01E0  00AC     MOVWF 0x2C
+01E1  3000     MOVLW 0x0
+01E2  00AB     MOVWF 0x2B
+01E3  3000     MOVLW 0x0
+01E4  00AA     MOVWF time_to_last_recived_bit
+195:               isReceivingData = 0;
+01E5  107D     BCF isReceivingData, 0x0
+196:               receive_data = 0;
+01E6  3000     MOVLW 0x0
+01E7  00B5     MOVWF 0x35
+01E8  3000     MOVLW 0x0
+01E9  00B4     MOVWF 0x34
+01EA  3000     MOVLW 0x0
+01EB  00B3     MOVWF 0x33
+01EC  3000     MOVLW 0x0
+01ED  00B2     MOVWF receive_data
+197:               receive_byte = 0;
+01EE  01C8     CLRF receive_byte
+198:           }
+01EF  0008     RETURN
+199:           
+200:           char parseDevideId() {
+026C  0008     RETURN
+201:               
+202:           }
+203:           
+204:           unsigned int parseData() {
+205:               
+206:           }
+207:           
+208:           void setOption() {
+026B  0008     RETURN
+209:               
+210:           }
+211:           
+212:           void checkTimeoutReceiveBit() {
+017B  083A     MOVF time, W
+017C  00CF     MOVWF __pcstackBANK0
+017D  083B     MOVF 0x3B, W
+017E  00D0     MOVWF 0x50
+017F  083C     MOVF 0x3C, W
+0180  00D1     MOVWF 0x51
+0181  083D     MOVF 0x3D, W
+0182  00D2     MOVWF 0x52
+0183  082A     MOVF time_to_last_recived_bit, W
+0184  02CF     SUBWF __pcstackBANK0, F
+0185  082B     MOVF 0x2B, W
+0186  1C03     BTFSS STATUS, 0x0
+0187  0F2B     INCFSZ 0x2B, W
+0188  298A     GOTO 0x18A
+0189  298B     GOTO 0x18B
+018A  02D0     SUBWF 0x50, F
+018B  082C     MOVF 0x2C, W
+018C  1C03     BTFSS STATUS, 0x0
+018D  0F2C     INCFSZ 0x2C, W
+018E  2990     GOTO 0x190
+018F  2991     GOTO 0x191
+0190  02D1     SUBWF 0x51, F
+0191  082D     MOVF 0x2D, W
+0192  1C03     BTFSS STATUS, 0x0
+0193  0F2D     INCFSZ 0x2D, W
+0194  2996     GOTO 0x196
+0195  2997     GOTO 0x197
+0196  02D2     SUBWF 0x52, F
+0197  0852     MOVF 0x52, W
+0198  1D03     BTFSS STATUS, 0x2
+0199  29A7     GOTO 0x1A7
+019A  0851     MOVF 0x51, W
+019B  1D03     BTFSS STATUS, 0x2
+019C  29A7     GOTO 0x1A7
+019D  3013     MOVLW 0x13
+019E  0250     SUBWF 0x50, W
+019F  1D03     BTFSS STATUS, 0x2
+01A0  29A5     GOTO 0x1A5
+01A1  3089     MOVLW 0x89
+01A2  024F     SUBWF __pcstackBANK0, W
+01A3  1D03     BTFSS STATUS, 0x2
+01A4  29A5     GOTO 0x1A5
+01A5  1C03     BTFSS STATUS, 0x0
+01A6  0008     RETURN
+213:               if (time - time_to_last_recived_bit > TIMEOUT_RECIVE_BIT) {
+214:                   resetReceivedData();
+01A7  21DB     CALL 0x1DB
+215:               }
+216:           }
+01A8  0008     RETURN
+217:           
+218:           void main(void) {
+0020  2256     CALL 0x256
+219:               setup();
+220:               while (1) {
+0021  21C3     CALL 0x1C3
+221:                   //Если загорелся диод, то нужно засечь время когда он загорелся и повернуть счетный
+222:                   //если нужно
+223:                   isLightFlag();
+224:                   //Выключить диод, если время его горения истекло
+225:                   isLightOff();
+0022  214C     CALL 0x14C
+226:                   //Если счетчик времени переполнен - сбросить
+227:                   isResetTime();
+0023  2204     CALL 0x204
+228:                   //Если прошло время с включения, то включить недоучет
+229:                   isTimeToUpgrade();
+0024  21A9     CALL 0x1A9
+230:                   //Проверяем, если данных не было более n секунд, то сбрасываем все принятые данные
+231:                   checkTimeoutReceiveBit();
+0025  217B     CALL 0x17B
+232:                   if (isReceivedData()) {
+0026  225D     CALL 0x25D
+0027  1C03     BTFSS STATUS, 0x0
+0028  2821     GOTO 0x21
+233:                       
+234:                       //Если init_byte еще нет, то формируем его
+235:                       if (!init_byte_receive) {
+0029  0849     MOVF init_byte_receive, W
+002A  1D03     BTFSS STATUS, 0x2
+002B  284E     GOTO 0x4E
+236:                           receive_byte |= getReceiveBit() << i;
+002C  224E     CALL 0x24E
+002D  3000     MOVLW 0x0
+002E  1803     BTFSC STATUS, 0x0
+002F  3001     MOVLW 0x1
+0030  00D3     MOVWF 0x53
+0031  0A7A     INCF i, W
+0032  2835     GOTO 0x35
+0033  1003     BCF STATUS, 0x0
+0034  0DD3     RLF 0x53, F
+0035  3EFF     ADDLW 0xFF
+0036  1D03     BTFSS STATUS, 0x2
+0037  2833     GOTO 0x33
+0038  0853     MOVF 0x53, W
+0039  00D4     MOVWF 0x54
+003A  0854     MOVF 0x54, W
+003B  04C8     IORWF receive_byte, F
+237:                           i++;
+003C  3001     MOVLW 0x1
+003D  00D3     MOVWF 0x53
+003E  0853     MOVF 0x53, W
+003F  07FA     ADDWF i, F
+238:                           if (i == 8) {
+0040  3008     MOVLW 0x8
+0041  067A     XORWF i, W
+0042  1D03     BTFSS STATUS, 0x2
+0043  287F     GOTO 0x7F
+239:                               if (receive_byte == INIT_BYTE) {
+0044  30B4     MOVLW 0xB4
+0045  0648     XORWF receive_byte, W
+0046  1D03     BTFSS STATUS, 0x2
+0047  284C     GOTO 0x4C
+240:                                   init_byte_receive = receive_byte;
+0048  0848     MOVF receive_byte, W
+0049  00D3     MOVWF 0x53
+004A  0853     MOVF 0x53, W
+004B  00C9     MOVWF init_byte_receive
+241:                               }
+242:                               i = 0;
+004C  01FA     CLRF i
+004D  287F     GOTO 0x7F
+243:                           }
+244:                       //Если init_byte есть, и чтение данных не началось, проверяем паузу
+245:                       } else if (!isReceivingData) {
+004E  187D     BTFSC isReceivingData, 0x0
+004F  287F     GOTO 0x7F
+246:                           if (time - time_to_last_recived_bit > TIME_INIT_BYTE_DELAY) {
+0050  083A     MOVF time, W
+0051  00D3     MOVWF 0x53
+0052  083B     MOVF 0x3B, W
+0053  00D4     MOVWF 0x54
+0054  083C     MOVF 0x3C, W
+0055  00D5     MOVWF 0x55
+0056  083D     MOVF 0x3D, W
+0057  00D6     MOVWF 0x56
+0058  082A     MOVF time_to_last_recived_bit, W
+0059  02D3     SUBWF 0x53, F
+005A  082B     MOVF 0x2B, W
+005B  1C03     BTFSS STATUS, 0x0
+005C  0F2B     INCFSZ 0x2B, W
+005D  285F     GOTO 0x5F
+005E  2860     GOTO 0x60
+005F  02D4     SUBWF 0x54, F
+0060  082C     MOVF 0x2C, W
+0061  1C03     BTFSS STATUS, 0x0
+0062  0F2C     INCFSZ 0x2C, W
+0063  2865     GOTO 0x65
+0064  2866     GOTO 0x66
+0065  02D5     SUBWF 0x55, F
+0066  082D     MOVF 0x2D, W
+0067  1C03     BTFSS STATUS, 0x0
+0068  0F2D     INCFSZ 0x2D, W
+0069  286B     GOTO 0x6B
+006A  286C     GOTO 0x6C
+006B  02D6     SUBWF 0x56, F
+006C  0856     MOVF 0x56, W
+006D  1D03     BTFSS STATUS, 0x2
+006E  287C     GOTO 0x7C
+006F  0855     MOVF 0x55, W
+0070  1D03     BTFSS STATUS, 0x2
+0071  287C     GOTO 0x7C
+0072  3003     MOVLW 0x3
+0073  0254     SUBWF 0x54, W
+0074  1D03     BTFSS STATUS, 0x2
+0075  287A     GOTO 0x7A
+0076  30E9     MOVLW 0xE9
+0077  0253     SUBWF 0x53, W
+0078  1D03     BTFSS STATUS, 0x2
+0079  287A     GOTO 0x7A
+007A  1C03     BTFSS STATUS, 0x0
+007B  287E     GOTO 0x7E
+247:                               isReceivingData = 1;
+007C  147D     BSF isReceivingData, 0x0
+248:                           } else {
+007D  287F     GOTO 0x7F
+249:                               resetReceivedData();
+007E  21DB     CALL 0x1DB
+250:                           }
+251:                       }
+252:                       
+253:                       //Если идет чтение данных, то читаем;
+254:                       if (isReceivingData) {
+007F  1C7D     BTFSS isReceivingData, 0x0
+0080  28AE     GOTO 0xAE
+255:                           receive_data |= getReceiveBit() << i;
+0081  0A7A     INCF i, W
+0082  00D3     MOVWF 0x53
+0083  224E     CALL 0x24E
+0084  3000     MOVLW 0x0
+0085  1803     BTFSC STATUS, 0x0
+0086  3001     MOVLW 0x1
+0087  00D4     MOVWF 0x54
+0088  01D5     CLRF 0x55
+0089  288D     GOTO 0x8D
+008A  1003     BCF STATUS, 0x0
+008B  0DD4     RLF 0x54, F
+008C  0DD5     RLF 0x55, F
+008D  0BD3     DECFSZ 0x53, F
+008E  288A     GOTO 0x8A
+008F  0854     MOVF 0x54, W
+0090  00D6     MOVWF 0x56
+0091  0855     MOVF 0x55, W
+0092  00D7     MOVWF 0x57
+0093  3000     MOVLW 0x0
+0094  1BD7     BTFSC 0x57, 0x7
+0095  30FF     MOVLW 0xFF
+0096  00D8     MOVWF 0x58
+0097  00D9     MOVWF 0x59
+0098  0856     MOVF 0x56, W
+0099  04B2     IORWF receive_data, F
+009A  0857     MOVF 0x57, W
+009B  04B3     IORWF 0x33, F
+009C  0858     MOVF 0x58, W
+009D  04B4     IORWF 0x34, F
+009E  0859     MOVF 0x59, W
+009F  04B5     IORWF 0x35, F
+256:                           i++;
+00A0  3001     MOVLW 0x1
+00A1  00D3     MOVWF 0x53
+00A2  0853     MOVF 0x53, W
+00A3  07FA     ADDWF i, F
+257:                           if (i == 24) {
+00A4  3018     MOVLW 0x18
+00A5  067A     XORWF i, W
+00A6  1D03     BTFSS STATUS, 0x2
+00A7  28AE     GOTO 0xAE
+258:                               if (parseDevideId() == DEVICE_ID) {
+00A8  226C     CALL 0x26C
+00A9  3A78     XORLW 0x78
+00AA  1D03     BTFSS STATUS, 0x2
+00AB  28AD     GOTO 0xAD
+259:                                   setOption();
+00AC  226B     CALL 0x26B
+260:                               }
+261:                               resetReceivedData();
+00AD  21DB     CALL 0x1DB
+262:                           }
+263:                       }
+00AE  083D     MOVF 0x3D, W
+00AF  00AD     MOVWF 0x2D
+00B0  083C     MOVF 0x3C, W
+00B1  00AC     MOVWF 0x2C
+00B2  083B     MOVF 0x3B, W
+00B3  00AB     MOVWF 0x2B
+00B4  083A     MOVF time, W
+00B5  00AA     MOVWF time_to_last_recived_bit
+264:                       
+265:                       time_to_last_recived_bit = time;
+266:                       __delay_ms(4);
+00B6  3015     MOVLW 0x15
+00B7  1283     BCF STATUS, 0x5
+00B8  1303     BCF STATUS, 0x6
+00B9  00D4     MOVWF 0x54
+00BA  30C6     MOVLW 0xC6
+00BB  00D3     MOVWF 0x53
+00BC  0BD3     DECFSZ 0x53, F
+00BD  28BC     GOTO 0xBC
+00BE  0BD4     DECFSZ 0x54, F
+00BF  28BC     GOTO 0xBC
+267:                       status_interrupt_io = 0;
+00C0  1283     BCF STATUS, 0x5
+00C1  1303     BCF STATUS, 0x6
+00C2  01CA     CLRF status_interrupt_io
+00C3  2821     GOTO 0x21
+268:                   }
+269:               }
+270:           }
+---  C:/Temp/s8m8.s  ------------------------------------------------------------------------------------
+000D  2263     CALL 0x263
+000E  00DA     MOVWF cr_limit
+000F  2264     CALL 0x264
+0010  00DB     MOVWF 0x5B
+0011  2265     CALL 0x265
+0012  00DC     MOVWF 0x5C
+0013  2266     CALL 0x266
+0014  00DD     MOVWF 0x5D
+023E  0064     CLRWDT
+023F  0180     CLRF INDF
+0240  0A84     INCF FSR, F
+0241  0604     XORWF FSR, W
+0242  1903     BTFSC STATUS, 0x2
+0243  3400     RETLW 0x0
+0244  0604     XORWF FSR, W
+0245  2A3F     GOTO 0x23F
+0015  1383     BCF STATUS, 0x7
+0016  3020     MOVLW 0x20
+0017  0084     MOVWF FSR
+0018  304F     MOVLW 0x4F
+0019  223E     CALL 0x23E
+001A  01FA     CLRF i
+001B  01FB     CLRF array_index
+001C  01FC     CLRF current_port_A
+001D  01FD     CLRF isReceivingData
+001E  0183     CLRF STATUS
+001F  2820     GOTO 0x20
