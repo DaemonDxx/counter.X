@@ -17,6 +17,24 @@ report ("== start bit ==");
            RA5 <= '1'; -- стартовый бит (1/2 битового интервала)
            report ("== start bitS ==");
            wait for 5000 ms;
+                RA5 <= '0';
+               wait for 50 us;
+               RA5 <= '1';
+               wait for 100 ms;
+                RA5 <= '0';
+               wait for 50 us;
+               RA5 <= '1';
+               wait for 100 ms;
+                RA5 <= '0';
+               wait for 50 us;
+               RA5 <= '1';
+               wait for 100 ms;
+                RA5 <= '0';
+               wait for 50 us;
+               RA5 <= '1';
+               wait for 300 ms;
+                
+
            while match(lineVar, "") == false loop -- Обрабатываем строку, пока она не пуста
              read(lineVar, data_in);
              if data_in == 0 then -- кодируем 0

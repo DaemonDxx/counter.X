@@ -17,6 +17,7 @@
 #define INTERRUPT_WEIGTH_PHASE_C 1000
 
 #define TIMEOUT_PROGMODE_ON 4000
+#define TIMEOUT_PROGMODE_OFF 3
 #define MAX_PERIOD 500
 
 //Количество импульсов до моргания

@@ -39,9 +39,11 @@ unsigned int interrupt_weight[5];
 unsigned long last_interrupt_time = 0;
 char PROG_MODE = 0;
 char i = 0;
-unsigned int period = 0;
+int period = 0;
 unsigned long t = 0;
-char buffer_p[3];
+char buffer_p[6];
+unsigned int receiving_data = 0;
+char count_receiving_bit = 0;
 
 //Функция поворота счетного механизма
 void turn() {
@@ -108,15 +110,20 @@ void interrupt isr() {
         array_index = current_port_A^last_port_A;
         if (current_port_A & array_index) {
             interrupt_counter += interrupt_weight[array_index];
-            if (PROG_MODE && i != 3) {
+            
+            //ЛОгика для протокола
+            if (PROG_MODE) {
             t = time - last_interrupt_time;
+            
             if (t < 250) {
                 buffer_p[i] = t;
                 i++;
             }
+            
             last_interrupt_time = time;
-        }
+            }
         } 
+        
         if (interrupt_counter >= cr_limit) {
             //ВКлючить диод
             PORTCbits.RC0 = 0;
@@ -171,12 +178,53 @@ void setOption() {
 void onProgrammingMode() {
     if (time - last_interrupt_time > TIMEOUT_PROGMODE_ON) {
         PROG_MODE = 1;
+        period = 0;
+    }
+}
+
+void resetReceivingData() {
+    PROG_MODE = 0;
+    period = 0;
+}
+
+int s = 0;
+char e = 0;
+ char k = 0;
+
+void receivedBit() {
+   
+    for (k = 0; k<i; k++) {
+        s += buffer_p[k];
+    }
+    s = s/i;
+    if ((s-period <5) && (s-period > -5)) {
+        i = 0;
+        while ((time - last_interrupt_time < period*3) || !e) {
+            if (i > 0) {
+                e = 1;
+            }
+        }
+        if (!e) {
+            receiving_data |= 1 << count_receiving_bit;
+            count_receiving_bit++;
+        } else {
+            resetReceivingData();
+        }
+    } else {
+            resetReceivingData();
     }
 }
 
 void setPeriod() {
     if (i == 3){
         period = (buffer_p[0]+buffer_p[1]+buffer_p[2])/3;
+        i = 0;
+        buffer_p[0] = 0;
+        buffer_p[1] = 0;
+        buffer_p[2] = 0;
+        receiving_data = 0;
+        count_receiving_bit = 0;
+        __delay_ms(100);
     }
 }
 
@@ -197,6 +245,11 @@ void main(void) {
         onProgrammingMode();
         if (!period && PROG_MODE) {
             setPeriod();
+        }
+        if (period && PROG_MODE) {
+            if (i >= 2) {
+                receivedBit();
+            }
         }
     }
 }
